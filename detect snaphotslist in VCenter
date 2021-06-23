@@ -1,0 +1,2 @@
+#To list all snapshots in a conneted VCenter
+Get-VM -PipelineVariable vm | Get-Snapshot | Select-Object VM, Name, folder, Description,@{Name = "PowerState"; Expression = { $vm.PowerState } }, @{Name = "Cluster"; Expression = { (get-cluster -vm $vm).name } }, @{Name = "Size"; Expression = { "{0:N2} GB" -f ($_.SizeGB) } }, Created | Sort-Object created | Export-csv "<path>" -NoTypeInformation
