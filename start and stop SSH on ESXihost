@@ -1,0 +1,4 @@
+#To start SSH on a VMHost
+Get-VMHost "<hostname>" | Get-VMHostService| Where { $_.Key -eq "TSM-SSH" } | Start-VMHostService
+#To start SSH on a VMHost
+Get-VMHost "<hostname>" | Get-VMHostService| Where { $_.Key -eq "TSM-SSH" } | Stop-VMHostService
