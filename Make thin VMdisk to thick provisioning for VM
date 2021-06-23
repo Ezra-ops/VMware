@@ -1,0 +1,74 @@
+$vminfo = @()
+#$vms = get-content <path/.txt>
+$vms = "test1", "test2"
+$date = Get-Date -Format "MM_dd_yyyy_hh_mm"
+$LogFile = "<path>" + "Thin2Thick-$($date).log"
+
+Function LogMe {
+    param(
+        [Parameter(Mandatory = $true)]
+        [String]$message,
+        [string]$messColor
+    )
+  
+    $timeStamp = Get-Date -Format "MM-dd-yyyy_hh:mm:ss"
+  
+    if ($messColor) { $color = "red" }else { $color = "green" } #if anything passed as param2 changing color to red
+    Write-Host -NoNewline -ForegroundColor White "[$timestamp]"
+    Write-Host  -ForegroundColor $color " $message"
+    $logMessage = "[$timeStamp] $message"
+    $logMessage | Out-File -Append -LiteralPath $LogFile
+}
+
+try {
+    get-vm $vms | Get-HardDisk | Where-Object { $_.storageformat -eq "thin" } | ForEach-Object {
+        $row = "" | Select-Object VM, HDD, DS 
+        LogMe "Working on $($_.parent)"
+        #collecting info to move hdd back
+        $row.VM = $_.parent
+        $row.HDD = $_.name
+        $row.DS = $_.Filename.split("]")[0].split("[")[1]
+        $vminfo += $row
+
+        #Documenting Values
+        LogMe " VMName: $($_.parent)"
+        LogMe " HDD: $($_.name)"
+        LogMe " Original Datastore: $($_.Filename.split("]")[0].split("[")[1])"
+    
+        #Gettting Datastore to move to
+        $destDS = get-vm $_.parent | Get-DatastoreCluster | Get-Datastore | Sort-Object -Property FreespaceGB -Descending:$true | Select-Object -First 1 
+   
+        #First move
+        LogMe " Moving $($_.name) on $($_.parent) to $($destDS)"
+        Move-HardDisk -HardDisk $_ -Datastore $destDS -Confirm:$false -RunAsync | Out-Null
+        LogMe " " #adding space for log readability
+    } | Wait-Task
+
+    #Second Move
+    foreach ($vm in $vminfo) {
+        LogMe "Second Move for $($vm.vm)"
+        LogMe " Moving HDD: $($vm.hdd)"
+        LogMe " To Datastore: $($vm.ds)"
+        $sourceDS = get-datastore $vm.ds
+        $HDD2Move = get-vm $vm.vm | Get-HardDisk -name $vm.HDD
+        Move-HardDisk -HardDisk $HDD2Move -Datastore $sourceDS -StorageFormat Thick -Confirm:$false | Out-Null
+
+        #verifying move
+        LogMe " Verifying $($vm.hdd) on $($vm.vm) is now thick provsioned"
+        $vmVerify = get-vm $vm.vm | Get-HardDisk -Name $vm.hdd | Select-Object Filename, storageformat
+        if (($vmVerify.storageformat -eq "Thick") -and ($vmVerify.Filename.split("]")[0].split("[")[1] -eq $vm.ds)) {
+            LogMe "     $($vm.hdd) on $($vm.vm) storage format: $($vmVerify.storageformat)"
+            LogMe "     $($vm.hdd) on $($vm.vm) is on DS: $($vmVerify.Filename.split("]")[0].split("[")[1])"
+        }
+        else {
+            LogMe "     $($vm.hdd) on $($vm.vm) storage format: $($vmVerify.storageformat)" 0
+            LogMe "     $($vm.hdd) on $($vm.vm) is on DS: $($vmVerify.Filename.split("]")[0].split("[")[1])" 0
+        }
+        LogMe " " #adding space for log readability
+    } 
+}
+
+catch {
+    LogMe "****ERROR PLEASE CHECK MESSAGE****" 0
+    LogMe "     ****$($_.Exception.Message)****" 0
+}
