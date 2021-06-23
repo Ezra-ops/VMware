@@ -1,0 +1,4 @@
+#To connect to VCenter 
+Connect-VIServer "<fdqn/ip of VCenter>"
+#To disconnet from all VCenters that you are connected to
+Disconnect-VIServer * -Force -Confirm:$false
