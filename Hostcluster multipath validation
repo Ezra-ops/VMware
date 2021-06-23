@@ -1,0 +1,36 @@
+try {
+    $out = @()
+    $cluster = (get-cluster | Sort-Object name).name | Out-GridView -PassThru
+    foreach ($esx in (get-cluster $cluster | Get-VMHost | Sort-Object name)) {
+        foreach ($hba in (Get-VMHostHba -VMHost $esx -Type "FibreChannel")) {
+            $target = ((Get-View $hba.VMhost).Config.StorageDevice.ScsiTopology.Adapter | Where-Object { $_.Adapter -eq $hba.Key }).Target
+            $luns = Get-ScsiLun -Hba $hba -LunType "disk" -ErrorAction SilentlyContinue
+            $nrPaths = ($target | ForEach-Object { $_.Lun.Count } | Measure-Object -Sum).Sum
+            $props = [PSCustomObject] @{
+                VMHost   = $esx.name
+                HBA      = $hba.Name
+                Port_WWN = "{0:X}" -f $hba.PortWorldWideName
+                Targets  = $target.Count
+                Devices  = $luns.Count
+                Paths    = $nrPaths
+            }
+            $out += $props
+        }
+    }
+}
+
+catch {
+
+    Write-Host $_.Exception.Message
+
+}
+
+$out | ft
+
+#In the third line. if you use - 
+#$cluster = (get-cluster | Sort-Object name).name | Out-GridView -PassThru This will open another window with the cluster list.  You can pick one or multiple and it will run against it.  
+If you don’t want that you can just change it to
+#$cluster = “CLUSTERNAME”
+#For the $out | ft line
+#Ft is format table.  You can change that to export-csv or remove the |ft and it will output it in a list form.
+#Export-Csv "path\filename.csv" -NoTypeInformation
